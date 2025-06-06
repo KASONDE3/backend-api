@@ -1,22 +1,34 @@
-from typing import Optional
-from fastapi import APIRouter, Depends, HTTPException, Query
+from typing import List, Optional
+from fastapi import APIRouter, Depends, HTTPException, Path, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy.orm import joinedload
 from db import get_async_session
 from db import get_db
 from schemas.ticketSchemas import TicketCreate
-from models.ticketModels import User, Ticket, TicketCategory, TicketPriority, Status
+from models.ticketModels import TicketOut, User, Ticket, TicketCategory, TicketPriority, Status
 from db import get_async_session
 
 router = APIRouter()
 
 
-@router.get("/all")
-async def get_all_tickets(session: AsyncSession = Depends(get_async_session)):
-    result = await session.execute(select(Ticket))
+@router.get("/all", response_model=List[TicketOut])
+async def get_all_tickets(db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(Ticket))
     tickets = result.scalars().all()
     return tickets
+
+@router.get("/{ticket_id}", response_model=TicketOut)
+async def get_ticket_by_id(
+    ticket_id: int = Path(..., gt=0),
+    session: AsyncSession = Depends(get_async_session)
+):
+    result = await session.execute(select(Ticket).where(Ticket.ticket_id == ticket_id))
+    ticket = result.scalar_one_or_none()
+    if ticket is None:
+        raise HTTPException(status_code=404, detail="Ticket not found")
+    return ticket
+
 
 @router.post("/create")
 async def create_ticket(ticket_data: TicketCreate, db: AsyncSession = Depends(get_db)):

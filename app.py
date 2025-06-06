@@ -39,4 +39,3 @@ async def root(db: AsyncSession = Depends(get_db)):
 ## Rooutes 
 app.include_router(ticket_router, prefix="/tickets", tags=["Tickets"])
 app.include_router(meta_router, prefix="/api/meta", tags=["Meta"])
-app.include_router(getTickets, prefix="/tickets", tags=["Get All Tickets"])

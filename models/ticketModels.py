@@ -1,4 +1,6 @@
-from pydantic import BaseModel
+import datetime
+from typing import Optional
+from pydantic import BaseModel, ConfigDict
 from sqlalchemy import Column, Integer, String, Text, ForeignKey, DateTime
 from sqlalchemy.sql import func
 from sqlalchemy.orm import declarative_base
@@ -30,6 +32,24 @@ class Ticket(Base):
     assigned_to = Column(Integer, nullable=False)
     created_at = Column(DateTime, server_default=func.now())
     updated_at = Column(DateTime, onupdate=func.now(), server_default=func.now())
+
+class TicketOut(BaseModel):
+    ticket_id: int
+    user_id: int
+    category_id: int
+    assigned_to: Optional[int]
+    status_id: int
+    priority_id: int
+    title: str
+    description: Optional[str]
+    created_at: datetime
+    updated_at: Optional[datetime]
+
+    model_config = ConfigDict(
+        from_attributes=True,
+        arbitrary_types_allowed=True
+    )
+
 
 class TicketCategory(Base):
     __tablename__="ticket_categories"
