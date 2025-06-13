@@ -6,7 +6,7 @@ from sqlalchemy.orm import joinedload
 from db import get_async_session
 from db import get_db
 from schemas.ticketSchemas import TicketCreate
-from models.ticketModels import TicketOut, User, Ticket, TicketCategory, TicketPriority, Status
+from models.ticketModels import TicketOut, TicketResponse, TicketUpdate, User, Ticket, TicketCategory, TicketPriority, Status
 from db import get_async_session
 
 router = APIRouter()
@@ -29,6 +29,58 @@ async def get_ticket_by_id(
         raise HTTPException(status_code=404, detail="Ticket not found")
     return ticket
 
+"""
+@router.post("/create")
+async def create_ticket(ticket_data: TicketCreate, db: AsyncSession = Depends(get_db)):
+    # Check if user exists
+    result = await db.execute(select(User).where(User.email == ticket_data.email))
+    user = result.scalars().first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    # Resolve priority name to ID
+    priority_result = await db.execute(
+        select(TicketPriority).where(TicketPriority.name == ticket_data.priority)
+    )
+    priority = priority_result.scalar_one_or_none()
+    if not priority:
+        raise HTTPException(status_code=400, detail="Invalid priority")
+
+    # Resolve category name to ID
+    category_result = await db.execute(
+        select(TicketCategory).where(TicketCategory.name == ticket_data.category)
+    )
+    category = category_result.scalar_one_or_none()
+    if not category:
+        raise HTTPException(status_code=400, detail="Invalid category")
+
+    # Resolve status name to ID
+    status_result = await db.execute(
+        select(Status).where(Status.name == ticket_data.status)
+    )
+    status = status_result.scalar_one_or_none()
+    if not status:
+        raise HTTPException(status_code=400, detail="Invalid status")
+
+    # Create ticket
+    new_ticket = Ticket(
+        title=ticket_data.title,
+        description=ticket_data.description,
+        user_id=user.user_id,
+        priority_id=ticket_data.priority_id,
+        category_id=ticket_data.category_id,
+        status_id=ticket_data.status_id,
+        assigned_to=ticket_data.assigned_to
+    )
+    db.add(new_ticket)
+    await db.commit()
+    await db.refresh(new_ticket)
+
+    return {
+        "message": "Ticket created successfully",
+        "ticket_id": new_ticket.ticket_id
+    }
+    """
 
 @router.post("/create")
 async def create_ticket(ticket_data: TicketCreate, db: AsyncSession = Depends(get_db)):
@@ -58,7 +110,6 @@ async def create_ticket(ticket_data: TicketCreate, db: AsyncSession = Depends(ge
         "ticket_id": new_ticket.ticket_id
     }
 
-
 @router.get("/verify-email")
 async def verify_email(email: str, db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(User).where(User.email == email))
@@ -75,19 +126,20 @@ async def verify_email(email: str, db: AsyncSession = Depends(get_db)):
     }
 
 
-@router.get("/priorities")
-async def get_priorities(db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(TicketPriority))
-    return result.scalars().all()
 
+@router.put("/tickets/update-status", response_model=TicketResponse)
+async def update_ticket_status(payload: TicketUpdate, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(Ticket).where(Ticket.ticket_id == payload.ticket_id))
+    ticket = result.scalar_one_or_none()
 
-@router.get("/categories")
-async def get_categories(db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(TicketCategory))
-    return result.scalars().all()
+    if not ticket:
+        raise HTTPException(status_code=404, detail="Ticket not found")
 
+    if ticket.assigned_to != payload.assigned_to:
+        raise HTTPException(status_code=403, detail="You are not authorized to update this ticket")
 
-@router.get("/statuses")
-async def get_statuses(db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(Status))
-    return result.scalars().all()
+    ticket.status_id = payload.new_status_id
+    await db.commit()
+    await db.refresh(ticket)
+
+    return ticket

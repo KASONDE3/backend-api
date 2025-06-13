@@ -18,10 +18,10 @@ AsyncSessionLocal = async_sessionmaker(engine, expire_on_commit=False)
 Base = declarative_base()
 
 # Dependency
-async def get_db() -> AsyncSession:
+async def get_db() -> AsyncSession: # type: ignore
     async with AsyncSessionLocal() as session:
         yield session
         
-async def get_async_session() -> AsyncSession:
+async def get_async_session() -> AsyncSession: # type: ignore
     async with AsyncSessionLocal() as session:
         yield session

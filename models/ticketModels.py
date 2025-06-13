@@ -7,6 +7,8 @@ from sqlalchemy.orm import declarative_base
 
 Base = declarative_base()
 
+# --- SQLAlchemy Models ---
+
 class User(Base):
     __tablename__ = "users"
     user_id = Column(Integer, primary_key=True, index=True)
@@ -19,6 +21,7 @@ class User(Base):
     department = Column(String(20), nullable=False)
     created_at = Column(DateTime, server_default=func.now())
     updated_at = Column(DateTime, onupdate=func.now(), server_default=func.now())
+
 
 class Ticket(Base):
     __tablename__ = "tickets"
@@ -33,6 +36,27 @@ class Ticket(Base):
     created_at = Column(DateTime, server_default=func.now())
     updated_at = Column(DateTime, onupdate=func.now(), server_default=func.now())
 
+
+class TicketCategory(Base):
+    __tablename__ = "ticket_categories"
+    category_id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(255), unique=True)
+
+
+class TicketPriority(Base):
+    __tablename__ = "ticket_priorities"
+    priority_id = Column(Integer, primary_key=True)
+    name = Column(String(50), nullable=False)
+    response_time = Column(Integer, nullable=False)
+
+
+class Status(Base):
+    __tablename__ = "statuses"
+    status_id = Column(Integer, primary_key=True)
+    name = Column(String(50), nullable=False)
+
+# --- Pydantic Schemas ---
+
 class TicketOut(BaseModel):
     ticket_id: int
     user_id: int
@@ -42,8 +66,8 @@ class TicketOut(BaseModel):
     priority_id: int
     title: str
     description: Optional[str]
-    created_at: datetime
-    updated_at: Optional[datetime]
+    created_at: datetime.datetime
+    updated_at: Optional[datetime.datetime]  
 
     model_config = ConfigDict(
         from_attributes=True,
@@ -51,21 +75,47 @@ class TicketOut(BaseModel):
     )
 
 
-class TicketCategory(Base):
-    __tablename__="ticket_categories"
-    category_id = Column(Integer, primary_key=True, index=True)
-    name = Column(String(255), unique=True)
-    
-class TicketPriority(Base):
-    __tablename__="ticket_priorities"
-    priority_id = Column(Integer, primary_key=True)
-    name = Column(String(50), nullable=False)
-    response_time = Column(Integer, nullable=False)
-    
-class Status(Base):
-    __tablename__="statuses"
-    status_id = Column(Integer, primary_key=True)
-    name = Column(String(50), nullable=False)
+class TicketCreate(BaseModel):
+    email: str
+    title: str
+    description: str
+    priority_id: int
+    category_id: int
+    status_id: int
+    assigned_to: Optional[int] = None
+
 
 class TicketStatusUpdate(BaseModel):
     status_id: int
+
+
+class TicketUpdate(BaseModel):
+    ticket_id: int
+    assigned_to: int
+    new_status_id: int
+
+
+class TicketResponse(BaseModel):
+    ticket_id: int
+    title: str
+    description: Optional[str]
+    status_id: int
+    assigned_to: Optional[int]
+
+    class Config:
+        orm_mode = True
+
+
+class PriorityOut(BaseModel):
+    priority_id: int
+    name: str
+
+
+class CategoryOut(BaseModel):
+    category_id: int
+    name: str
+
+
+class StatusOut(BaseModel):
+    status_id: int
+    name: str

@@ -3,9 +3,12 @@ from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 from db import engine, Base, get_db
+from routes import ticket_metadata
 from routes.ticketRoutes import router as ticket_router
 from routes.MetaRoutes import router as meta_router
 from routes.get_tickets import router as getTickets
+from routes.dropdowns import router as dropdowns 
+from routes.technicians import router as techician_router
 
 app = FastAPI()
 from fastapi.middleware.cors import CORSMiddleware
@@ -39,3 +42,6 @@ async def root(db: AsyncSession = Depends(get_db)):
 ## Rooutes 
 app.include_router(ticket_router, prefix="/tickets", tags=["Tickets"])
 app.include_router(meta_router, prefix="/api/meta", tags=["Meta"])
+#app.include_router(dropdowns, prefix="/dropdown", tags=["dropdown"] )
+app.include_router(ticket_metadata.router)
+app.include_router(techician_router, prefix="/users", tags=["Technicians"])
