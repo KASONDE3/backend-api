@@ -4,6 +4,7 @@ from pydantic import BaseModel, ConfigDict
 from sqlalchemy import Column, Integer, String, Text, ForeignKey, DateTime
 from sqlalchemy.sql import func
 from sqlalchemy.orm import declarative_base
+from sqlalchemy.orm import relationship
 
 Base = declarative_base()
 
@@ -22,6 +23,8 @@ class User(Base):
     created_at = Column(DateTime, server_default=func.now())
     updated_at = Column(DateTime, onupdate=func.now(), server_default=func.now())
 
+    assigned_tickets = relationship("Ticket", back_populates="technician", foreign_keys="Ticket.assigned_to")
+
 
 class Ticket(Base):
     __tablename__ = "tickets"
@@ -32,9 +35,12 @@ class Ticket(Base):
     status_id = Column(Integer, ForeignKey("statuses.status_id"))
     category_id = Column(Integer, ForeignKey("ticket_categories.category_id"))
     priority_id = Column(Integer, ForeignKey("ticket_priorities.priority_id"))
-    assigned_to = Column(Integer, nullable=False)
+    assigned_to = Column(Integer, ForeignKey("users.user_id"), nullable=True)
+
     created_at = Column(DateTime, server_default=func.now())
     updated_at = Column(DateTime, onupdate=func.now(), server_default=func.now())
+    technician = relationship("User", back_populates="assigned_tickets", foreign_keys=[assigned_to])
+    status = relationship("Status", back_populates="tickets", foreign_keys=[status_id])
 
 
 class TicketCategory(Base):
@@ -54,6 +60,11 @@ class Status(Base):
     __tablename__ = "statuses"
     status_id = Column(Integer, primary_key=True)
     name = Column(String(50), nullable=False)
+
+    # Optional reverse relationship to tickets
+    tickets = relationship("Ticket", back_populates="status")  # ✅ This is valid
+
+    
 
 # --- Pydantic Schemas ---
 
