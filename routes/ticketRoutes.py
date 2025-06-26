@@ -1,4 +1,7 @@
+from email.message import EmailMessage
+import os
 from typing import List, Optional
+import aiosmtplib
 from fastapi import APIRouter, Depends, HTTPException, Path, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
@@ -10,7 +13,6 @@ from models.ticketModels import TicketOut, TicketResponse, TicketUpdate, User, T
 from db import get_async_session
 
 router = APIRouter()
-
 
 @router.get("/all", response_model=List[TicketOut])
 async def get_all_tickets(db: AsyncSession = Depends(get_db)):
@@ -29,69 +31,23 @@ async def get_ticket_by_id(
         raise HTTPException(status_code=404, detail="Ticket not found")
     return ticket
 
-"""
+## Ticket with Email Sending 
 @router.post("/create")
 async def create_ticket(ticket_data: TicketCreate, db: AsyncSession = Depends(get_db)):
-    # Check if user exists
-    result = await db.execute(select(User).where(User.email == ticket_data.email))
-    user = result.scalars().first()
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-
-    # Resolve priority name to ID
-    priority_result = await db.execute(
-        select(TicketPriority).where(TicketPriority.name == ticket_data.priority)
-    )
-    priority = priority_result.scalar_one_or_none()
-    if not priority:
-        raise HTTPException(status_code=400, detail="Invalid priority")
-
-    # Resolve category name to ID
-    category_result = await db.execute(
-        select(TicketCategory).where(TicketCategory.name == ticket_data.category)
-    )
-    category = category_result.scalar_one_or_none()
-    if not category:
-        raise HTTPException(status_code=400, detail="Invalid category")
-
-    # Resolve status name to ID
-    status_result = await db.execute(
-        select(Status).where(Status.name == ticket_data.status)
-    )
-    status = status_result.scalar_one_or_none()
-    if not status:
-        raise HTTPException(status_code=400, detail="Invalid status")
-
-    # Create ticket
-    new_ticket = Ticket(
-        title=ticket_data.title,
-        description=ticket_data.description,
-        user_id=user.user_id,
-        priority_id=ticket_data.priority_id,
-        category_id=ticket_data.category_id,
-        status_id=ticket_data.status_id,
-        assigned_to=ticket_data.assigned_to
-    )
-    db.add(new_ticket)
-    await db.commit()
-    await db.refresh(new_ticket)
-
-    return {
-        "message": "Ticket created successfully",
-        "ticket_id": new_ticket.ticket_id
-    }
-    """
-
-@router.post("/create")
-async def create_ticket(ticket_data: TicketCreate, db: AsyncSession = Depends(get_db)):
-    # Check if user exists
+    # 1. Check if user exists
     result = await db.execute(select(User).where(User.email == ticket_data.email))
     user = result.scalars().first()
 
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
-    # Create ticket
+    # 2. Check if technician exists
+    technician = None
+    if ticket_data.assigned_to:
+        result = await db.execute(select(User).where(User.user_id == ticket_data.assigned_to))
+        technician = result.scalars().first()
+
+    # 3. Create the ticket
     new_ticket = Ticket(
         title=ticket_data.title,
         description=ticket_data.description,
@@ -101,14 +57,62 @@ async def create_ticket(ticket_data: TicketCreate, db: AsyncSession = Depends(ge
         priority_id=ticket_data.priority_id,
         assigned_to=ticket_data.assigned_to
     )
+
     db.add(new_ticket)
     await db.commit()
     await db.refresh(new_ticket)
+
+    # 4. Send email to technician (if assigned)
+    if technician:
+        await send_email_to_technician(
+            technician_email=technician.email,
+            technician_name=technician.first_name,
+            ticket_title=new_ticket.title,
+            ticket_description=new_ticket.description
+        )
 
     return {
         "message": "Ticket created successfully",
         "ticket_id": new_ticket.ticket_id
     }
+
+# Email sending function
+async def send_email_to_technician(technician_email, technician_name, ticket_title, ticket_description):
+    system_email = os.getenv("SYSTEM_EMAIL_ADDRESS")
+    system_password = os.getenv("SYSTEM_EMAIL_PASSWORD")
+    smtp_server = os.getenv("SMTP_SERVER", "smtp.gmail.com")
+    smtp_port = int(os.getenv("SMTP_PORT", 587))
+
+    message = EmailMessage()
+    message["From"] = system_email
+    message["To"] = technician_email
+    message["Subject"] = f"New Ticket Assigned: {ticket_title}"
+
+    message.set_content(f"""
+Hi {technician_name},
+
+A new ticket has been assigned to you.
+
+Title: {ticket_title}
+Description: {ticket_description}
+
+Please log in to the support system to view more details.
+
+Best regards,
+IT Support System
+""")
+
+    try:
+        await aiosmtplib.send(
+            message,
+            hostname=smtp_server,
+            port=smtp_port,
+            start_tls=True,
+            username=system_email,
+            password=system_password
+        )
+    except Exception as e:
+        print(f"Failed to send email to technician: {e}")
 
 @router.get("/verify-email")
 async def verify_email(email: str, db: AsyncSession = Depends(get_db)):
@@ -125,9 +129,7 @@ async def verify_email(email: str, db: AsyncSession = Depends(get_db)):
         "email": user.email
     }
 
-
-
-@router.put("/tickets/update-status", response_model=TicketResponse)
+@router.put("/update-status", response_model=TicketResponse)
 async def update_ticket_status(payload: TicketUpdate, db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(Ticket).where(Ticket.ticket_id == payload.ticket_id))
     ticket = result.scalar_one_or_none()
