@@ -14,6 +14,20 @@ from db import get_async_session
 
 router = APIRouter()
 
+@router.get("/verify-email")
+async def verify_email(email: str, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(User).where(User.email == email))
+    user = result.scalars().first()
+
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    return {
+        "user_id": user.user_id,
+        "first_name": user.first_name,
+        "last_name": user.last_name,
+        "email": user.email
+    }
 @router.get("/all", response_model=List[TicketOut])
 async def get_all_tickets(db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(Ticket))
@@ -113,21 +127,6 @@ IT Support System
         )
     except Exception as e:
         print(f"Failed to send email to technician: {e}")
-
-@router.get("/verify-email")
-async def verify_email(email: str, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(User).where(User.email == email))
-    user = result.scalars().first()
-
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-
-    return {
-        "user_id": user.user_id,
-        "first_name": user.first_name,
-        "last_name": user.last_name,
-        "email": user.email
-    }
 
 @router.put("/update-status", response_model=TicketResponse)
 async def update_ticket_status(payload: TicketUpdate, db: AsyncSession = Depends(get_db)):

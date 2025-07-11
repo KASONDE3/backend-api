@@ -11,6 +11,7 @@ from routes.dropdowns import router as dropdowns
 from routes.technicians import router as techician_router
 from routes.ticket_status import router as ticket_status
 from routes.dynamic_technician import router as dynamic_technician
+from routes.auth_routes import router as auth_router
 
 app = FastAPI()
 from fastapi.middleware.cors import CORSMiddleware
@@ -49,3 +50,4 @@ app.include_router(ticket_metadata.router)
 app.include_router(techician_router, prefix="/users", tags=["Technicians"])
 app.include_router(ticket_status, prefix="/status", tags=["TicketStatus"])
 app.include_router(dynamic_technician, prefix="/dynamic_technician", tags=["dynamic_technician"])
+app.include_router(auth_router, prefix="/auth", tags=["Authentication"])
