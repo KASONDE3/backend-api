@@ -23,7 +23,16 @@ class User(Base):
     created_at = Column(DateTime, server_default=func.now())
     updated_at = Column(DateTime, onupdate=func.now(), server_default=func.now())
 
-    assigned_tickets = relationship("Ticket", back_populates="technician", foreign_keys="Ticket.assigned_to")
+    assigned_tickets = relationship(
+        "Ticket",
+        back_populates="technician",
+        foreign_keys="Ticket.assigned_to"
+    )
+    created_tickets = relationship(
+        "Ticket",
+        back_populates="user",
+        foreign_keys="Ticket.user_id"
+    )
 
 
 class Ticket(Base):
@@ -39,8 +48,23 @@ class Ticket(Base):
 
     created_at = Column(DateTime, server_default=func.now())
     updated_at = Column(DateTime, onupdate=func.now(), server_default=func.now())
-    technician = relationship("User", back_populates="assigned_tickets", foreign_keys=[assigned_to])
-    status = relationship("Status", back_populates="tickets", foreign_keys=[status_id])
+
+    # Relationships
+    technician = relationship(
+        "User",
+        back_populates="assigned_tickets",
+        foreign_keys=[assigned_to]
+    )
+    user = relationship(
+        "User",
+        back_populates="created_tickets",
+        foreign_keys=[user_id]
+    )
+    status = relationship(
+        "Status",
+        back_populates="tickets",
+        foreign_keys=[status_id]
+    )
 
 
 class TicketCategory(Base):
@@ -113,8 +137,7 @@ class TicketResponse(BaseModel):
     status_id: int
     assigned_to: Optional[int]
 
-    class Config:
-        orm_mode = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class PriorityOut(BaseModel):

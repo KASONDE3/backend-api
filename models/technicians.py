@@ -1,8 +1,8 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 class TechnicianOut(BaseModel):
     user_id: int
     first_name: str
-    last_name:str
+    last_name: str
     
-    class config: orm_model = True
+    model_config = ConfigDict(from_attributes=True)

@@ -8,9 +8,10 @@ from sqlalchemy.future import select
 from sqlalchemy.orm import joinedload
 from db import get_async_session
 from db import get_db
-from schemas.ticketSchemas import TicketCreate
+from schemas.ticketSchemas import TicketCreate, FullTicketResponse
 from models.ticketModels import TicketOut, TicketResponse, TicketUpdate, User, Ticket, TicketCategory, TicketPriority, Status
 from db import get_async_session
+from sqlalchemy.orm import selectinload
 
 router = APIRouter()
 
@@ -34,16 +35,41 @@ async def get_all_tickets(db: AsyncSession = Depends(get_db)):
     tickets = result.scalars().all()
     return tickets
 
-@router.get("/{ticket_id}", response_model=TicketOut)
+@router.get("/{ticket_id}", response_model=FullTicketResponse)
 async def get_ticket_by_id(
     ticket_id: int = Path(..., gt=0),
     session: AsyncSession = Depends(get_async_session)
 ):
-    result = await session.execute(select(Ticket).where(Ticket.ticket_id == ticket_id))
+    result = await session.execute(
+        select(Ticket)
+        .options(
+            selectinload(Ticket.user),
+            selectinload(Ticket.technician)
+        )
+        .where(Ticket.ticket_id == ticket_id)
+    )
     ticket = result.scalar_one_or_none()
+
     if ticket is None:
         raise HTTPException(status_code=404, detail="Ticket not found")
-    return ticket
+
+    return {
+        "ticket_id": ticket.ticket_id,
+        "user_id": ticket.user_id,
+        "category_id": ticket.category_id,
+        "assigned_to": ticket.assigned_to,
+        "status_id": ticket.status_id,
+        "priority_id": ticket.priority_id,
+        "title": ticket.title,
+        "description": ticket.description,
+        "created_at": ticket.created_at,
+        "updated_at": ticket.updated_at,
+        "user_email": ticket.user.email if ticket.user else None,
+        "created_by_name": f"{ticket.user.first_name} {ticket.user.last_name}" if ticket.user else None,
+        "department": ticket.user.department if ticket.user else None,
+        "technician_name": f"{ticket.technician.first_name} {ticket.technician.last_name}" if ticket.technician else None
+    }
+
 
 ## Ticket with Email Sending 
 @router.post("/create")
