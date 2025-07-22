@@ -3,10 +3,8 @@ from typing import Optional
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy import Column, Integer, String, Text, ForeignKey, DateTime
 from sqlalchemy.sql import func
-from sqlalchemy.orm import declarative_base
+from db import Base
 from sqlalchemy.orm import relationship
-
-Base = declarative_base()
 
 # --- SQLAlchemy Models ---
 

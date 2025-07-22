@@ -1,5 +1,5 @@
 from sqlalchemy import Column, Integer, String
-from models.ticketModels import Base  # Reuse the global Base from ticketModels
+from db import Base
 
 class Auth(Base):
     __tablename__ = "auth"

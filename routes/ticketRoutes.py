@@ -154,9 +154,48 @@ IT Support System
     except Exception as e:
         print(f"Failed to send email to technician: {e}")
 
+# Email sending function for notifying the ticket creator
+async def send_email_to_user(user_email, user_name, ticket_title, new_status):
+    system_email = os.getenv("SYSTEM_EMAIL_ADDRESS")
+    system_password = os.getenv("SYSTEM_EMAIL_PASSWORD")
+    smtp_server = os.getenv("SMTP_SERVER", "smtp.gmail.com")
+    smtp_port = int(os.getenv("SMTP_PORT", 587))
+
+    message = EmailMessage()
+    message["From"] = system_email
+    message["To"] = user_email
+    message["Subject"] = f"Your Ticket Status Updated: {ticket_title}"
+
+    message.set_content(f"""
+Hi {user_name},
+
+The status of your ticket '{ticket_title}' has been updated to: {new_status}
+
+Please log in to the support system to view more details.
+
+Best regards,
+IT Support System
+""")
+
+    try:
+        await aiosmtplib.send(
+            message,
+            hostname=smtp_server,
+            port=smtp_port,
+            start_tls=True,
+            username=system_email,
+            password=system_password
+        )
+    except Exception as e:
+        print(f"Failed to send email to user: {e}")
+
 @router.put("/update-status", response_model=TicketResponse)
 async def update_ticket_status(payload: TicketUpdate, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(Ticket).where(Ticket.ticket_id == payload.ticket_id))
+    result = await db.execute(
+        select(Ticket)
+        .options(selectinload(Ticket.user))
+        .where(Ticket.ticket_id == payload.ticket_id)
+    )
     ticket = result.scalar_one_or_none()
 
     if not ticket:
@@ -168,5 +207,16 @@ async def update_ticket_status(payload: TicketUpdate, db: AsyncSession = Depends
     ticket.status_id = payload.new_status_id
     await db.commit()
     await db.refresh(ticket)
+
+    # Send email to the user who created the ticket
+    if ticket.user:
+        user_email = ticket.user.email
+        user_name = f"{ticket.user.first_name} {ticket.user.last_name}"
+        ticket_title = ticket.title
+        # Get new status name
+        status_result = await db.execute(select(Status).where(Status.status_id == ticket.status_id))
+        status_obj = status_result.scalar_one_or_none()
+        new_status_name = status_obj.name if status_obj else str(ticket.status_id)
+        await send_email_to_user(user_email, user_name, ticket_title, new_status_name)
 
     return ticket

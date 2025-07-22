@@ -37,7 +37,7 @@ def create_refresh_token(data: dict) -> str:
     payload = {
         "sub": data.get("sub"),
         "exp": expire,
-        "email": data.get("email"),
+        ".": data.get("email"),
         "role": data.get("role"),
         "department": data.get("department"),
         "first_name": data.get("first_name"),
