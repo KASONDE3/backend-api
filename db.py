@@ -17,11 +17,17 @@ engine = create_async_engine(DATABASE_URL, echo=True)
 AsyncSessionLocal = async_sessionmaker(engine, expire_on_commit=False)
 Base = declarative_base()
 
+# Import all models here to register them with the Base
+from models.auth_model import Auth
+from models.ticketModels import User, Ticket
+from models.recommendations_models import Recommendation
+
+
 # Dependency
-async def get_db() -> AsyncSession:
+async def get_db() -> AsyncSession: # type: ignore
     async with AsyncSessionLocal() as session:
         yield session
         
-async def get_async_session() -> AsyncSession:
+async def get_async_session() -> AsyncSession: # type: ignore
     async with AsyncSessionLocal() as session:
         yield session
