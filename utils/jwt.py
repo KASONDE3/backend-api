@@ -23,6 +23,7 @@ def create_access_token(data: dict) -> str:
     payload = {
         "sub": data.get("sub"),
         "exp": expire,
+        "user_id": data.get("user_id"),
         "email": data.get("email"),
         "role": data.get("role"),
         "department": data.get("department"),

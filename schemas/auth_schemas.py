@@ -1,3 +1,4 @@
+from typing import Optional
 from pydantic import BaseModel, EmailStr, ConfigDict
 
 class Token(BaseModel):
@@ -16,6 +17,7 @@ class LoginRequest(BaseModel):
 class AuthOut(BaseModel):
     auth_id: int
     email: str
+
 
     model_config = ConfigDict(from_attributes=True)
 
