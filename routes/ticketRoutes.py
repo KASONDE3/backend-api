@@ -3,6 +3,7 @@ import os
 from typing import List, Optional
 import aiosmtplib
 from fastapi import APIRouter, Depends, HTTPException, Path, Query
+from sqlalchemy import func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy.orm import joinedload
@@ -220,3 +221,27 @@ async def update_ticket_status(payload: TicketUpdate, db: AsyncSession = Depends
         await send_email_to_user(user_email, user_name, ticket_title, new_status_name)
 
     return ticket
+
+#### reports section 
+## route that get deptartment wise ticket count
+@router.get("/counts/department-wise")
+async def get_department_wise_count(
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Returns the number of tickets grouped by department.
+    """
+    result = await db.execute(
+        select(
+            User.department,
+            func.count(Ticket.ticket_id).label("count")
+        )
+        .join(User, User.user_id == Ticket.user_id)
+        .group_by(User.department)
+    )
+
+    counts = [
+        {"department": dept, "count": count}
+        for dept, count in result.all()
+    ]
+    return counts
