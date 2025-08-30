@@ -21,6 +21,7 @@ Base = declarative_base()
 from models.auth_model import Auth
 from models.ticketModels import User, Ticket
 from models.recommendations_models import Recommendation
+from models.chatbot_models import ChatbotConversation
 
 
 # Dependency

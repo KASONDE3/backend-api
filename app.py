@@ -12,6 +12,7 @@ from routes.dynamic_technician import router as dynamic_technician
 from routes.auth_routes import router as auth_router
 from routes.recommendations import router as recommendations_router
 from routes.reports import router as reports_router
+from routes.chatbot import router as chatbot_router
 
 app = FastAPI()
 from fastapi.middleware.cors import CORSMiddleware
@@ -52,3 +53,4 @@ app.include_router(dynamic_technician, prefix="/dynamic_technician", tags=["dyna
 app.include_router(auth_router, prefix="/auth", tags=["Authentication"])
 app.include_router(recommendations_router, prefix="/Recommendations", tags=["Recommendations"])
 app.include_router(reports_router, prefix="/reports", tags=["Reports"])
+app.include_router(chatbot_router, prefix="/chatbot", tags=["Chatbot"])

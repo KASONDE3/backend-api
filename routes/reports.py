@@ -70,7 +70,7 @@ async def get_recurring_tickets(
     Examples of what is NOT recurring:
     - "Printer not working" and "Network down" (different issues, even if same user/category)
     - "E22" and "G 05" (completely different titles, not recurring)
-    
+
     Tickets data: {json.dumps(tickets_data, indent=2)}
 
     Return your response as a JSON array of ticket_ids that represent TRUE recurring issues, like: [1, 2, 3]
@@ -81,9 +81,9 @@ async def get_recurring_tickets(
     try:
         # Call Gemini 2.0 Flash API
         request_data = {
-            "contents": [{
-                "parts": [{"text": prompt}]
-            }]
+                    "contents": [{
+                        "parts": [{"text": prompt}]
+                    }]
         }
         request_headers = {
             "Content-Type": "application/json",
