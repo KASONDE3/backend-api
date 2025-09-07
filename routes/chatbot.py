@@ -117,15 +117,9 @@ async def generate_ai_weekly_summary(db: AsyncSession) -> WeeklyReportData:
         weekly_total_result = await db.execute(weekly_total_query)
         weekly_total = weekly_total_result.scalar()
         
-        # New conversations (compared to previous week)
-        two_weeks_ago = datetime.now() - timedelta(days=14)
-        previous_week_query = select(func.count(ChatbotConversation.conversation_id)).where(
-            ChatbotConversation.created_at >= two_weeks_ago,
-            ChatbotConversation.created_at < week_ago
-        )
-        previous_week_result = await db.execute(previous_week_query)
-        previous_week_total = previous_week_result.scalar()
-        new_conversations = weekly_total - previous_week_total
+        # For weekly reports, show actual conversations in the current week period
+        # This represents the conversations that occurred in the reporting period
+        new_conversations = weekly_total
         
         # Top issues by frequency
         top_issues_query = select(
@@ -218,15 +212,9 @@ async def generate_ai_weekly_summary_for_date(db: AsyncSession, target_date: dat
         weekly_total_result = await db.execute(weekly_total_query)
         weekly_total = weekly_total_result.scalar()
         
-        # New conversations (compared to previous week)
-        two_weeks_ago = target_date - timedelta(days=14)
-        previous_week_query = select(func.count(ChatbotConversation.conversation_id)).where(
-            ChatbotConversation.created_at >= two_weeks_ago,
-            ChatbotConversation.created_at < week_ago
-        )
-        previous_week_result = await db.execute(previous_week_query)
-        previous_week_total = previous_week_result.scalar()
-        new_conversations = weekly_total - previous_week_total
+        # For weekly reports, show actual conversations in the current week period
+        # This represents the conversations that occurred in the reporting period
+        new_conversations = weekly_total
         
         # Top issues by frequency
         top_issues_query = select(
@@ -475,7 +463,7 @@ def generate_email_content(report_data: WeeklyReportData, user_name: str, is_mis
                     </div>
                     <div style="text-align: center; padding: 15px; background: white; border-radius: 6px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
                         <div style="font-size: 32px; font-weight: bold; color: #28a745;">{report_data.new_conversations}</div>
-                        <div style="color: #666; font-size: 14px;">New Conversations</div>
+                        <div style="color: #666; font-size: 14px;">Conversations This Period</div>
                     </div>
                     <div style="text-align: center; padding: 15px; background: white; border-radius: 6px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
                         <div style="font-size: 32px; font-weight: bold; color: #ffc107;">{len(report_data.user_activity)}</div>
