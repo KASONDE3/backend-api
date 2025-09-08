@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from passlib.context import CryptContext
@@ -8,6 +8,7 @@ from schemas.auth_schemas import LoginInput, AuthOut, Token, LoginRequest
 from db import get_db
 from models.auth_model import Auth
 from models.ticketModels import User
+from models.access_logs import AccessLog
 from schemas.auth_schemas import AuthCreate, AuthOut, Token, TokenPayload
 from utils.jwt import (
     create_access_token,
@@ -33,6 +34,39 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
     return pwd_context.verify(plain_password, hashed_password)
 
 
+async def log_access_event(
+    db: AsyncSession,
+    user_email: str,
+    action: str,
+    request: Request = None
+):
+    """Log access events (login/logout) to the access_logs table"""
+    try:
+        ip_address = None
+        user_agent = None
+        
+        if request:
+            # Get client IP address
+            if request.client:
+                ip_address = request.client.host
+            # Get user agent
+            user_agent = request.headers.get("user-agent")
+        
+        access_log = AccessLog(
+            user_email=user_email,
+            action=action,
+            ip_address=ip_address,
+            user_agent=user_agent
+        )
+        
+        db.add(access_log)
+        await db.commit()
+    except Exception as e:
+        # Log the error but don't fail the main operation
+        print(f"Failed to log access event: {e}")
+        await db.rollback()
+
+
 # 🔐 Register
 @router.post("/register", response_model=AuthOut)  # AuthOut should at least include email
 async def register(auth_data: AuthCreate, db: AsyncSession = Depends(get_db)):
@@ -52,6 +86,7 @@ async def register(auth_data: AuthCreate, db: AsyncSession = Depends(get_db)):
 @router.post("/login", response_model=Token)
 async def login(
     login_data: LoginRequest,
+    request: Request,
     db: AsyncSession = Depends(get_db)
 ):
     result = await db.execute(select(Auth).where(Auth.email == login_data.email))
@@ -76,6 +111,9 @@ async def login(
 
     access_token = create_access_token(token_data)
     refresh_token = create_refresh_token(token_data)
+
+    # Log successful login
+    await log_access_event(db, user.email, "login", request)
 
     return Token(
         access_token=access_token,
@@ -122,6 +160,39 @@ async def refresh_token(payload: TokenPayload, db: AsyncSession = Depends(get_db
         )
     except Exception:
         raise HTTPException(status_code=401, detail="Invalid refresh token")
+
+
+# 🚪 Logout
+@router.post("/logout")
+async def logout(
+    request: Request,
+    db: AsyncSession = Depends(get_db)
+):
+    """Logout user and log the event"""
+    # Try to get user from token, but don't fail if token is invalid
+    user_email = None
+    try:
+        # Extract token from Authorization header
+        auth_header = request.headers.get("Authorization")
+        if auth_header and auth_header.startswith("Bearer "):
+            token = auth_header.split(" ")[1]
+            token_data = verify_token(token)
+            user_email = token_data.get("email") or token_data.get("sub")
+    except Exception as e:
+        # Token is invalid or missing, but we still want to log the logout attempt
+        print(f"Logout: Could not extract user from token: {e}")
+        pass
+    
+    # Log logout event (even if we couldn't get user email)
+    if user_email:
+        await log_access_event(db, user_email, "logout", request)
+        print(f"Logged logout for user: {user_email}")
+    else:
+        # Log with a placeholder if we can't determine the user
+        await log_access_event(db, "unknown_user", "logout", request)
+        print("Logged logout for unknown user")
+    
+    return {"message": "Successfully logged out"}
 
 
 # 👤 Get current user
@@ -183,3 +254,45 @@ async def admin_only_endpoint(current_role: str = Depends(require_role("admin"))
 async def technician_only_endpoint(current_role: str = Depends(require_role("technician"))):
     """Example endpoint that only technicians can access"""
     return {"message": "Welcome technician!", "role": current_role}
+
+
+# 📊 Get total number of users
+@router.get("/count")
+async def get_user_count(db: AsyncSession = Depends(get_db)):
+    """Get the total number of registered users"""
+    result = await db.execute(select(User))
+    users = result.scalars().all()
+    return {"total_users": len(users)}
+
+
+# 📋 Get access logs (admin only)
+@router.get("/access-logs")
+async def get_access_logs(
+    limit: int = 100,
+    offset: int = 0,
+    current_role: str = Depends(require_role("admin")),
+    db: AsyncSession = Depends(get_db)
+):
+    """Get access logs - admin only"""
+    result = await db.execute(
+        select(AccessLog)
+        .order_by(AccessLog.timestamp.desc())
+        .limit(limit)
+        .offset(offset)
+    )
+    logs = result.scalars().all()
+    
+    return {
+        "logs": [
+            {
+                "log_id": log.log_id,
+                "user_email": log.user_email,
+                "action": log.action,
+                "timestamp": log.timestamp,
+                "ip_address": log.ip_address,
+                "user_agent": log.user_agent
+            }
+            for log in logs
+        ],
+        "total_returned": len(logs)
+    }

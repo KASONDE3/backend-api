@@ -23,6 +23,7 @@ from models.ticketModels import User, Ticket
 from models.recommendations_models import Recommendation
 from models.chatbot_models import ChatbotConversation
 from models.weekly_reports import WeeklyReportLog
+from models.access_logs import AccessLog
 
 
 # Dependency
