@@ -15,7 +15,7 @@ load_dotenv()
 
 gemini_api_key = os.getenv("GEMINI_API_KEY")    # Get Gemini API key from environment variable
 
-# Set up logging
+# Set up logging    
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
