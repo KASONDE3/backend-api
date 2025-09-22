@@ -7,6 +7,7 @@ from models.ticketModels import User, Ticket, Status
 from db import get_db  
 from models.technicians import TechnicianOut  
 from sqlalchemy import func, case
+from datetime import datetime, date
 
 router = APIRouter()
 
@@ -48,8 +49,22 @@ async def get_technician_with_lowest_load(db: AsyncSession = Depends(get_db)):
 
 
 @router.get("/technicians/with-ticket-stats")
-async def get_technicians_with_ticket_stats(db: AsyncSession = Depends(get_db)):
-    # Count tickets by status for each technician
+async def get_technicians_with_ticket_stats(
+    db: AsyncSession = Depends(get_db),
+    period: str = "all"  # Options: today, month, year, all
+):
+    # Date filters
+    now = datetime.now()
+    filters = []
+    if period == "today":
+        filters.append(func.date(Ticket.created_at) == date.today())
+    elif period == "month":
+        filters.append(func.extract("year", Ticket.created_at) == now.year)
+        filters.append(func.extract("month", Ticket.created_at) == now.month)
+    elif period == "year":
+        filters.append(func.extract("year", Ticket.created_at) == now.year)
+    # else: no filter for "all"
+
     open_count = func.sum(case((Status.name == "open", 1), else_=0)).label("open_tickets")
     in_progress_count = func.sum(case((Status.name == "in-progress", 1), else_=0)).label("in_progress_tickets")
     completed_count = func.sum(case((Status.name == "completed", 1), else_=0)).label("completed_tickets")
@@ -71,6 +86,10 @@ async def get_technicians_with_ticket_stats(db: AsyncSession = Depends(get_db)):
         .group_by(User.user_id, User.first_name, User.last_name, User.email)
         .order_by(User.first_name.asc(), User.last_name.asc())
     )
+
+    # Apply time filters if any
+    if filters:
+        query = query.where(*filters)
 
     result = await db.execute(query)
     rows = result.all()
