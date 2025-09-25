@@ -1,6 +1,6 @@
 # routers/users.py or routers/technicians.py
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from models.ticketModels import User, Ticket, Status 
@@ -8,6 +8,8 @@ from db import get_db
 from models.technicians import TechnicianOut  
 from sqlalchemy import func, case
 from datetime import datetime, date
+from utils.jwt import require_role
+from pydantic import BaseModel
 
 router = APIRouter()
 
@@ -108,3 +110,50 @@ async def get_technicians_with_ticket_stats(
 
     return technicians
 
+    
+
+
+
+class ReassignTicketPayload(BaseModel):
+    ticket_id: int
+    from_technician_id: int
+    to_technician_id: int
+
+
+@router.post("/technicians/reassign")
+async def reassign_ticket(
+    payload: ReassignTicketPayload,
+    db: AsyncSession = Depends(get_db),
+    current_role: str = Depends(require_role("admin")),
+):
+    # Validate ticket exists
+    result = await db.execute(select(Ticket).where(Ticket.ticket_id == payload.ticket_id))
+    ticket = result.scalars().first()
+    if not ticket:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ticket not found")
+
+    # Validate technicians
+    if payload.from_technician_id == payload.to_technician_id:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Source and destination technicians must differ")
+
+    # Validate destination technician exists and is a technician
+    dest_q = await db.execute(select(User).where(User.user_id == payload.to_technician_id, User.role == "technician"))
+    dest_technician = dest_q.scalars().first()
+    if not dest_technician:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Destination technician not found")
+
+    # Validate current assignment (optional strict check)
+    if ticket.assigned_to is not None and ticket.assigned_to != payload.from_technician_id:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Ticket is not assigned to the specified source technician")
+
+    # Perform reassignment
+    ticket.assigned_to = payload.to_technician_id
+    await db.commit()
+    await db.refresh(ticket)
+
+    return {
+        "message": "Ticket reassigned successfully",
+        "ticket_id": ticket.ticket_id,
+        "from_technician_id": payload.from_technician_id,
+        "to_technician_id": payload.to_technician_id,
+    }
