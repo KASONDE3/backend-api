@@ -11,6 +11,7 @@ from db import get_async_session
 from db import get_db
 from schemas.ticketSchemas import TicketCreate, FullTicketResponse
 from models.ticketModels import TicketOut, TicketResponse, TicketUpdate, User, Ticket, TicketCategory, TicketPriority, Status
+from models.recommendations_models import Recommendation
 from db import get_async_session
 from sqlalchemy.orm import selectinload
 
@@ -204,6 +205,20 @@ async def update_ticket_status(payload: TicketUpdate, db: AsyncSession = Depends
 
     if ticket.assigned_to != payload.assigned_to:
         raise HTTPException(status_code=403, detail="You are not authorized to update this ticket")
+
+    # Check if trying to update to "Completed" status (status_id = 3)
+    if payload.new_status_id == 3:
+        # Check if ticket has any recommendations
+        recommendation_result = await db.execute(
+            select(Recommendation).where(Recommendation.ticket_id == payload.ticket_id)
+        )
+        recommendations = recommendation_result.scalars().all()
+        
+        if not recommendations:
+            raise HTTPException(
+                status_code=400, 
+                detail="Cannot update ticket to 'Completed' status. A recommendation must be provided first."
+            )
 
     ticket.status_id = payload.new_status_id
     await db.commit()

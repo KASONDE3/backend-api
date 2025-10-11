@@ -8,8 +8,32 @@ from db import get_db
 from models.technicians import TechnicianOut  
 from sqlalchemy import func, case
 from datetime import datetime, date
-from utils.jwt import require_role
+from utils.jwt import require_role, get_current_user_role
+from fastapi.security import OAuth2PasswordBearer
+from jose import JWTError, jwt
+
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
+SECRET_KEY = "your_super_secret_key"
+ALGORITHM = "HS256"
+
+def get_current_user_id(token: str = Depends(oauth2_scheme)) -> int:
+    """Extract user_id from JWT token"""
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        user_id = payload.get("user_id")
+        if user_id is None:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="User ID not found in token"
+            )
+        return user_id
+    except JWTError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Could not validate credentials"
+        )
 from pydantic import BaseModel
+from typing import Optional
 
 router = APIRouter()
 
@@ -53,6 +77,7 @@ async def get_technician_with_lowest_load(db: AsyncSession = Depends(get_db)):
 @router.get("/technicians/with-ticket-stats")
 async def get_technicians_with_ticket_stats(
     db: AsyncSession = Depends(get_db),
+    current_role: str = Depends(require_role("technician")),
     period: str = "all"  # Options: today, month, year, all
 ):
     # Date filters
@@ -67,9 +92,9 @@ async def get_technicians_with_ticket_stats(
         filters.append(func.extract("year", Ticket.created_at) == now.year)
     # else: no filter for "all"
 
-    open_count = func.sum(case((Status.name == "open", 1), else_=0)).label("open_tickets")
-    in_progress_count = func.sum(case((Status.name == "in-progress", 1), else_=0)).label("in_progress_tickets")
-    completed_count = func.sum(case((Status.name == "completed", 1), else_=0)).label("completed_tickets")
+    open_count = func.sum(case((Status.name == "Open", 1), else_=0)).label("open_tickets")
+    in_progress_count = func.sum(case((Status.name == "In-progress", 1), else_=0)).label("in_progress_tickets")
+    completed_count = func.sum(case((Status.name == "Completed", 1), else_=0)).label("completed_tickets")
 
     query = (
         select(
@@ -110,8 +135,105 @@ async def get_technicians_with_ticket_stats(
 
     return technicians
 
-    
 
+class TechnicianTicketResponse(BaseModel):
+    ticket_id: int
+    title: str
+    description: Optional[str]
+    status_name: str
+    priority_name: str
+    category_name: str
+    created_by_name: str
+    created_by_email: str
+    department: str
+    created_at: datetime
+    updated_at: Optional[datetime] = None
+
+    model_config = {"from_attributes": True}
+
+
+@router.get("/technicians/my-tickets", response_model=list[TechnicianTicketResponse])
+async def get_my_tickets(
+    db: AsyncSession = Depends(get_db),
+    current_user_id: int = Depends(get_current_user_id),
+    current_role: str = Depends(require_role("technician")),
+    period: str = "all"  # Options: today, month, year, all
+):
+    """
+    Get all tickets assigned to the currently authenticated technician
+    """
+    # Verify the technician exists and has the correct role
+    technician_result = await db.execute(
+        select(User).where(User.user_id == current_user_id, User.role == "technician")
+    )
+    technician = technician_result.scalars().first()
+    
+    if not technician:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, 
+            detail="Access denied: User is not registered as a technician"
+        )
+
+    # Date filters
+    now = datetime.now()
+    filters = [Ticket.assigned_to == current_user_id]
+    
+    if period == "today":
+        filters.append(func.date(Ticket.created_at) == date.today())
+    elif period == "month":
+        filters.append(func.extract("year", Ticket.created_at) == now.year)
+        filters.append(func.extract("month", Ticket.created_at) == now.month)
+    elif period == "year":
+        filters.append(func.extract("year", Ticket.created_at) == now.year)
+    # else: no additional time filter for "all"
+
+    # Import additional models needed for the query
+    from models.ticketModels import TicketCategory, TicketPriority
+
+    query = (
+        select(
+            Ticket.ticket_id,
+            Ticket.title,
+            Ticket.description,
+            Status.name.label("status_name"),
+            TicketPriority.name.label("priority_name"),
+            TicketCategory.name.label("category_name"),
+            User.first_name,
+            User.last_name,
+            User.email,
+            User.department,
+            Ticket.created_at,
+            Ticket.updated_at
+        )
+        .select_from(Ticket)
+        .join(Status, Status.status_id == Ticket.status_id)
+        .join(TicketPriority, TicketPriority.priority_id == Ticket.priority_id)
+        .join(TicketCategory, TicketCategory.category_id == Ticket.category_id)
+        .join(User, User.user_id == Ticket.user_id)  # User who created the ticket
+        .where(*filters)
+        .order_by(Ticket.created_at.desc())
+    )
+
+    result = await db.execute(query)
+    rows = result.all()
+
+    tickets = []
+    for row in rows:
+        tickets.append({
+            "ticket_id": row.ticket_id,
+            "title": row.title,
+            "description": row.description,
+            "status_name": row.status_name,
+            "priority_name": row.priority_name,
+            "category_name": row.category_name,
+            "created_by_name": f"{row.first_name} {row.last_name}",
+            "created_by_email": row.email,
+            "department": row.department,
+            "created_at": row.created_at,
+            "updated_at": row.updated_at
+        })
+
+    return tickets
 
 
 class ReassignTicketPayload(BaseModel):
