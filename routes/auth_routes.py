@@ -9,7 +9,7 @@ from db import get_db
 from models.auth_model import Auth
 from models.ticketModels import User
 from models.access_logs import AccessLog
-from schemas.auth_schemas import AuthCreate, AuthOut, Token, TokenPayload
+from schemas.auth_schemas import AuthCreate, AuthOut, Token, TokenPayload, AuthUpdate
 from utils.jwt import (
     create_access_token,
     create_refresh_token,
@@ -75,14 +75,14 @@ async def register(auth_data: AuthCreate, db: AsyncSession = Depends(get_db)):
         raise HTTPException(status_code=400, detail="Email already registered")
 
     hashed = hash_password(auth_data.password)
-    new_user = Auth(email=auth_data.email, password_hash=hashed)
+    new_user = Auth(email=auth_data.email, password_hash=hashed, is_approved=False)
     db.add(new_user)
     await db.commit()
     await db.refresh(new_user)
     return new_user
 
 
-# 🔐 Login
+# Login
 @router.post("/login", response_model=Token)
 async def login(
     login_data: LoginRequest,
@@ -98,6 +98,22 @@ async def login(
     # Get user profile information from users table
     user_profile = await db.execute(select(User).where(User.email == user.email))
     profile = user_profile.scalars().first()
+
+    # Check approval status if available on profile or auth record
+    is_approved = None
+    if profile is not None and hasattr(profile, "is_approved"):
+        try:
+            is_approved = bool(getattr(profile, "is_approved"))
+        except Exception:
+            is_approved = None
+    elif hasattr(user, "is_approved"):
+        try:
+            is_approved = bool(getattr(user, "is_approved"))
+        except Exception:
+            is_approved = None
+
+    if is_approved is False:
+        raise HTTPException(status_code=403, detail="Account not approved")
 
     # Prepare token data with all required fields
     token_data = {
@@ -122,7 +138,7 @@ async def login(
     )
 
 
-# 🔁 Refresh Token
+#  Refresh Token
 @router.post("/refresh", response_model=Token)
 async def refresh_token(payload: TokenPayload, db: AsyncSession = Depends(get_db)):
     try:
@@ -223,6 +239,43 @@ async def update_password(auth_data: AuthCreate, db: AsyncSession = Depends(get_
     return {"message": "Password updated successfully"}
 
 
+# 🔄 Update registered auth (email/is_approved)
+@router.put("/update-registered-user", response_model=AuthOut)
+async def update_registered_user(update: AuthUpdate, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(Auth).where(Auth.email == update.current_email))
+    auth_entry = result.scalars().first()
+
+    if not auth_entry:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    if update.new_email is not None:
+        # Ensure new email not taken
+        existing = await db.execute(select(Auth).where(Auth.email == update.new_email))
+        if existing.scalars().first():
+            raise HTTPException(status_code=400, detail="Email already in use")
+        auth_entry.email = update.new_email
+
+    if update.is_approved is not None:
+        auth_entry.is_approved = update.is_approved
+
+    await db.commit()
+    await db.refresh(auth_entry)
+    return auth_entry
+
+
+# ❌ Delete registered auth by email
+@router.delete("/registered/{email}")
+async def delete_registered_user(email: str, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(Auth).where(Auth.email == email))
+    auth_entry = result.scalars().first()
+
+    if not auth_entry:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    await db.delete(auth_entry)
+    await db.commit()
+    return {"message": f"Registered user {email} deleted"}
+
 # ❌ Delete user
 @router.delete("/delete/{email}")
 async def delete_user(email: str, db: AsyncSession = Depends(get_db)):
@@ -265,7 +318,7 @@ async def get_user_count(db: AsyncSession = Depends(get_db)):
     return {"total_users": len(users)}
 
 
-# 📋 Get access logs (admin only)
+# Get access logs (admin only)
 @router.get("/access-logs")
 async def get_access_logs(
     limit: int = 100,

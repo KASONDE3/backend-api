@@ -8,7 +8,7 @@ from db import get_db
 from models.technicians import TechnicianOut  
 from sqlalchemy import func, case
 from datetime import datetime, date
-from utils.jwt import require_role, get_current_user_role
+from utils.jwt import require_role, get_current_user_role, require_any_role
 from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError, jwt
 
@@ -77,7 +77,7 @@ async def get_technician_with_lowest_load(db: AsyncSession = Depends(get_db)):
 @router.get("/technicians/with-ticket-stats")
 async def get_technicians_with_ticket_stats(
     db: AsyncSession = Depends(get_db),
-    current_role: str = Depends(require_role("technician")),
+    current_role: str = Depends(require_any_role("technician", "admin")),
     period: str = "all"  # Options: today, month, year, all
 ):
     # Date filters
@@ -156,7 +156,7 @@ class TechnicianTicketResponse(BaseModel):
 async def get_my_tickets(
     db: AsyncSession = Depends(get_db),
     current_user_id: int = Depends(get_current_user_id),
-    current_role: str = Depends(require_role("technician")),
+    current_role: str = Depends(require_any_role("technician", "admin")),
     period: str = "all"  # Options: today, month, year, all
 ):
     """

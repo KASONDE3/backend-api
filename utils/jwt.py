@@ -138,3 +138,27 @@ def require_role(required_role: str):
                 detail="Could not validate credentials"
             )
     return role_checker
+
+
+def require_any_role(*required_roles: str):
+    """Dependency to require that the user's role is in the allowed list"""
+    allowed = set(required_roles)
+
+    def role_checker(token: str = Depends(oauth2_scheme)):
+        try:
+            payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+            user_role = payload.get("role")
+            if user_role not in allowed:
+                allowed_str = ", ".join(sorted(allowed)) or "<none>"
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail=f"Access denied. Required role: {allowed_str}"
+                )
+            return user_role
+        except JWTError:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Could not validate credentials"
+            )
+
+    return role_checker
