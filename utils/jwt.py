@@ -112,7 +112,7 @@ def get_current_user_department(token: str = Depends(oauth2_scheme)) -> str:
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Department information not found in token"
             )
-        return department
+        return department      
     except JWTError:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
